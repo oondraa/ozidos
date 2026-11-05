@@ -133,7 +133,8 @@ function Basemaps({ basemap }: { basemap: Basemap }) {
         opacity={0.55}
         {...TILE_PERF}
       />
-      <TileLayer key="sat-labels" url={`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`} maxZoom={19} {...TILE_PERF} />
+      {/* názvy obcí jen při oddálení – zblízka je Esri nemá ostré a byly obří a rozmazané */}
+      <TileLayer key="sat-labels" url={`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`} maxZoom={13} {...TILE_PERF} />
     </>
   );
 }
