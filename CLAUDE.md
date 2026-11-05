@@ -8,6 +8,9 @@ Osobní IDOS pro uživatele, který bydlí v **Běleči nad Orlicí** (u HK), kd
 Mapa HK a okolí se **všemi živými spoji** (vlaky, busy IREDO, MHD Hradec), **Nextbike** (stanice + dostupnost, ukládá se do DB),
 **zastávky**, **trasa spoje po kliknutí** a později **plánovač**. Je to jen pro jednoho uživatele.
 
+## Struktura
+- `shared/transit.ts` – jádro jízdních řádů a vyhledávání (CSA), používá ho server i web; `shared/area.ts` – oblast (BBOX) a Nextbike.
+
 ## Spuštění
 ```bash
 npm install
@@ -51,7 +54,7 @@ DB: `server/data/ozidos.db` (vestavěné `node:sqlite`, Node 24). Pozor: po `Tas
 - Odjezdy IREDO jen ~1 h dopředu (parametry času API ignoruje) → delší výhled přinese GTFS.
 
 ## Další kroky (v tomto pořadí)
-0. **ROZPRACOVÁNO – nasazení:** uživatel chce veřejné GitHub repo + GitHub Pages, ale NECHCE Oracle VM ani běžící domácí PC. Domov je už z kódu pryč (`web/src/home.ts`, localStorage; nastavení v poli Kam / podržením na mapě / v „Vrstvy a mapa“). Zjištěno (CORS z prohlížeče): Nextbike a GTFS mají `Access-Control-Allow-Origin: *`, IREDO a DPmHK NE (IREDO preflight 405). Navržený plán (ještě neschválený uživatelem): GitHub Actions denně postaví `area.json` z GTFS a nasadí Pages; vyhledávání (CSA) poběží v prohlížeči; pro IREDO/DPmHK malý bezstavový proxy (Vercel/Deno Deploy/Netlify Functions, ne Cloudflare); historie spojů (`trip_runs`) by bez stálého serveru odpadla. Git repo zatím NEexistuje, nic se nepushovalo.
+0. **Nasazení (hotovo 6. 11.):** veřejné repo https://github.com/oondraa/ozidos, web https://oondraa.github.io/ozidos/ (GitHub Pages přes Actions, `.github/workflows/pages.yml`: push na main + denně 4:15 UTC stáhne GTFS → `npm run build:data -w server` → `web/public/data/area.json` → build s `VITE_STATIC=1`). Uživatel zatím NECHCE živé busy na webu (žádný server ani proxy); `STATIC` režim ve webu (`web/src/static.ts`) = vyhledávání a odjezdy podle jízdního řádu v prohlížeči + Nextbike přímo (má CORS). Lokálně `npm run dev` dál běží se serverem a živými daty. Repo je veřejné → do kódu nedávat nic osobního (domov jen v localStorage, `web/src/home.ts`).
 1. Doladit UI na telefonu (uživatel chce další úpravy). Plánovač: alternativa Nextbikem, „příjezd do“, spojení s přestupem preferovat podle času čekání.
 2. Statistiky spolehlivosti spojů do Běleče z `trip_runs` (jezdí to vůbec?).
 3. PWA (mobil).
