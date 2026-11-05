@@ -1,0 +1,17 @@
+{
+  "name": "ozidos",
+  "private": true,
+  "description": "Osobní IDOS pro Hradec Králové a okolí – živé spoje, plánovač, Nextbike",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

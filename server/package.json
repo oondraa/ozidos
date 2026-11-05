@@ -1,0 +1,22 @@
+{
+  "name": "@ozidos/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --no-warnings=ExperimentalWarning src/index.ts",
+    "start": "tsx --no-warnings=ExperimentalWarning src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build:data": "tsx --no-warnings=ExperimentalWarning src/gtfs/build-static.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/yauzl": "^3.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

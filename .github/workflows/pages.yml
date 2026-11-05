@@ -1,0 +1,56 @@
+# Web OZIDOS na GitHub Pages – bez serveru.
+# Každé ráno (a po každém pushi) stáhne celostátní jízdní řády (GTFS), ořízne je na oblast
+# a nasadí web, který vyhledává spojení přímo v prohlížeči.
+name: Web na GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # 4:15 UTC = 5:15 / 6:15 v Praze; nové GTFS vychází kolem 4:30 místního času
+    - cron: '15 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Jízdní řády (GTFS → web/public/data/area.json)
+        run: npm run build:data -w server -- ../web/public/data
+
+      - name: Build webu (režim bez serveru)
+        run: npm run build -w web
+        env:
+          VITE_STATIC: '1'
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
