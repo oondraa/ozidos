@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CircleMarker, Polyline, Tooltip, useMap } from 'react-leaflet';
-import { getPlan, searchPlaces, STATIC, type Journey, type Leg, type Place, type PlanResult, type RideLeg } from './api';
+import { getPlan, HAS_LIVE, searchPlaces, type Journey, type Leg, type Place, type PlanResult, type RideLeg } from './api';
 import { KIND_COLOR } from './colors';
 import { delayLevel, formatDelay } from './format';
 import type { GeoState } from './geo';
@@ -534,7 +534,7 @@ function JourneyDetail({
 /** „Proč tu mrznu“: kde je bus a o kolik má zpoždění. */
 function RideLive({ l, now, onShowVehicle }: { l: RideLeg; now: number; onShowVehicle: (k: string) => void }) {
   // bez serveru (GitHub Pages) živá data nejsou
-  if (STATIC || l.dep - now > 2 * 3_600_000) return null;
+  if (!HAS_LIVE || l.dep - now > 2 * 3_600_000) return null;
   const d = l.live?.delaySec;
   if (!l.live) {
     return <div className="jd-live muted">Živá data zatím nejsou (spoj ještě nevyjel nebo ho nevidím).</div>;
