@@ -99,7 +99,7 @@ html, body, #root, .app { margin: 0; height: 100%; }
   box-shadow: 0 10px 30px rgb(15 23 42 / 0.25);
   font-size: 14px;
 }
-.panel-body { overflow: auto; padding: 0 14px 14px; overscroll-behavior: contain; }
+.panel-body { flex: 1; min-height: 0; overflow: auto; padding: 0 14px 14px; overscroll-behavior: contain; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; user-select: none; padding: 12px 14px 8px; position: relative; }
 .panel h1 { margin: 0; line-height: 0; }
 .panel h1 img { height: 26px; width: auto; }
@@ -110,14 +110,22 @@ html, body, #root, .app { margin: 0; height: 100%; }
 @media (max-width: 700px) {
   .panel {
     top: auto; left: 0; right: 0; bottom: 0; width: 100%;
-    max-height: 62vh; border-radius: 18px 18px 0 0;
+    max-height: none; border-radius: 18px 18px 0 0;
     padding-bottom: env(safe-area-inset-bottom);
+    /* výšku nastavuje sheet.ts; při puštění prstu plynule docvakne */
+    transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    overflow: hidden;
+    box-shadow: 0 -6px 24px rgb(15 23 42 / 0.25);
   }
-  .panel-head { padding-top: 16px; }
+  .panel-dragging { transition: none; }
+  /* za lištu se tahá – prohlížeč ji nesmí posouvat ani zoomovat */
+  .panel-head { padding-top: 18px; touch-action: none; cursor: grab; }
+  .panel-dragging .panel-head { cursor: grabbing; }
+  .grabber { width: 44px !important; height: 5px !important; top: 7px !important; background: #94a3b8 !important; }
   .grabber { display: block; position: absolute; top: 6px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: #cbd5e1; }
   .panel h1 img { height: 22px; }
-  .locate { bottom: calc(62vh + 12px) !important; }
-  .app:has(.panel-collapsed) .locate { bottom: 80px !important; }
+  .locate { transition: bottom 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .app:has(.panel-dragging) .locate { transition: none; }
 }
 .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin: 14px 0 6px; }
 .muted { color: var(--muted); margin: 4px 0; font-size: 13px; }

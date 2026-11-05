@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, useMap, useMapEvents, CircleMarker, Popup, Tooltip } from 'react-leaflet';
-import { getLive, STATIC, type LiveData, type SourceId, type Stop, type Vehicle, type VehicleKind } from './api';
+import { getLive, HAS_LIVE, type LiveData, type SourceId, type Stop, type Vehicle, type VehicleKind } from './api';
 import { DeparturesCard } from './departures';
 import { IconArrowRight, IconChevron, IconCity, IconClose, IconHome, IconLocate, IconMap, IconSatellite, IconSliders } from './icons';
 import { delayLevel, formatAgo, formatDelay, KIND_LABEL } from './format';
@@ -10,6 +10,7 @@ import { TripLayer, TripTimeline, useTrip } from './trip';
 import { MyLocation, useGeolocation } from './geo';
 import { JourneyLayer, PlannerCard, usePlan, type PlaceSel } from './planner';
 import { setHome, useHome } from './home';
+import { useBottomSheet } from './sheet';
 
 const HK_CENTER: [number, number] = [50.2, 15.86];
 /** Sledovaná oblast (stejná jako BBOX na serveru) s malou rezervou – dál mapa nepustí. */
@@ -184,6 +185,13 @@ export function App() {
   const [view, setView] = useStored<{ basemap: Basemap }>('ozidos.view', { basemap: 'satellite' });
   const [flyTarget, setFlyTarget] = useState<{ pos: [number, number]; zoom: number; n: number } | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
+  // telefon: panel jako spodní list tahaný prstem (sheet.ts); PC: rozbalit/sbalit klikem
+  const sheet = useBottomSheet();
+  const open = sheet.isMobile ? sheet.level !== 'peek' : panelOpen;
+  const openPanel = () => {
+    setPanelOpen(true);
+    sheet.reveal();
+  };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedSnapshot, setSelectedSnapshot] = useState<Vehicle | null>(null);
@@ -221,11 +229,11 @@ export function App() {
 
   const select = (tripKey: string | null) => {
     setSelectedKey(tripKey);
-    if (tripKey) setPanelOpen(true);
+    if (tripKey) openPanel();
   };
   const selectStop = (stop: Stop | null) => {
     setSelectedStop(stop);
-    if (stop) setPanelOpen(true);
+    if (stop) openPanel();
   };
   /** Klik do prázdné mapy zruší výběr spoje i zastávky (vybrané spojení zůstává). */
   const clearSelection = () => {
@@ -313,7 +321,7 @@ export function App() {
                 onClick={() => {
                   setFrom({ name: 'Bod na mapě', lat: pickAt[0], lon: pickAt[1] });
                   setPickAt(null);
-                  setPanelOpen(true);
+                  openPanel();
                 }}
               >
                 Odsud
@@ -322,7 +330,7 @@ export function App() {
                 onClick={() => {
                   setTo({ name: 'Bod na mapě', lat: pickAt[0], lon: pickAt[1] });
                   setPickAt(null);
-                  setPanelOpen(true);
+                  openPanel();
                 }}
               >
                 Sem
@@ -346,23 +354,32 @@ export function App() {
       <button
         className="locate"
         title="Kde jsem"
+        style={sheet.isMobile ? { bottom: sheet.height + 12 } : undefined}
         onClick={() => (geo.pos ? fly(geo.pos, 16) : alertNoGeo(geo.error))}
       >
         <IconLocate size={22} />
       </button>
 
-      <aside className={`panel ${panelOpen ? '' : 'panel-collapsed'}`}>
-        <header className="panel-head" onClick={() => setPanelOpen((o) => !o)}>
+      <aside
+        className={`panel ${open ? '' : 'panel-collapsed'} ${sheet.dragging ? 'panel-dragging' : ''}`}
+        style={sheet.isMobile ? { height: sheet.height } : undefined}
+      >
+        <header
+          className="panel-head"
+          onClick={sheet.isMobile ? undefined : () => setPanelOpen((o) => !o)}
+          {...(sheet.isMobile ? sheet.handlers : {})}
+        >
           <span className="grabber" />
           <h1>
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="OZIDOS" />
           </h1>
           <span className="panel-toggle">
-            <IconChevron dir={panelOpen ? 'down' : 'up'} />
+            <IconChevron dir={open ? 'down' : 'up'} />
           </span>
         </header>
 
-        {panelOpen && (
+        {/* na telefonu obsah vždy (při tahání je vidět), oříznutý výškou listu */}
+        {(open || sheet.isMobile) && (
           <div className="panel-body">
             {error && <div className="error">Server nedostupný: {error}</div>}
 
@@ -430,7 +447,7 @@ export function App() {
             {!journey && !selected && !selectedStop && !planState.result?.journeys.length && (
               <>
                 {/* bez serveru živé busy nemáme */}
-                {!STATIC && (
+                {HAS_LIVE && (
                   <section>
                     <h2>
                       {nearLabel} ({NEAR_HOME_KM} km)
@@ -462,7 +479,7 @@ export function App() {
               {settingsOpen && (
                 <>
                   <div className="sources">
-                    {(Object.keys(SOURCE_LABEL) as SourceId[]).filter((s) => !STATIC || s === 'nextbike').map((s) => {
+                    {(Object.keys(SOURCE_LABEL) as SourceId[]).filter((s) => HAS_LIVE || s === 'nextbike').map((s) => {
                       const st = data?.status[s];
                       return (
                         <span key={s} className={`source ${st?.ok ? 'ok' : st ? 'err' : ''}`} title={st?.lastError ?? ''}>
@@ -472,7 +489,7 @@ export function App() {
                     })}
                   </div>
                   <div className="layers">
-                    {LAYERS.filter((l) => !STATIC || l.id === 'bikes' || l.id === 'stops').map((l) => (
+                    {LAYERS.filter((l) => HAS_LIVE || l.id === 'bikes' || l.id === 'stops').map((l) => (
                       <label key={l.id} className={`chip chip-${l.id} ${enabled[l.id] ? 'on' : ''}`}>
                         <input
                           type="checkbox"

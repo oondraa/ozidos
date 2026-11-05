@@ -3,7 +3,8 @@
  * - jízdní řády: `data/area.json` (staví GitHub Actions denně z GTFS),
  * - vyhledávání spojení a odjezdy: společné jádro shared/transit.ts,
  * - Nextbike: přímo z jejich API (má CORS).
- * Živé polohy busů IREDO/DPmHK tu nejsou – jejich API z prohlížeče volat nejde.
+ * Živé busy IREDO/DPmHK jdou přes prostředníka (proxy/, Vercel), pokud je nastavený VITE_LIVE_URL –
+ * jejich API z prohlížeče přímo volat nejde.
  */
 import { BBOX, inBbox, NEXTBIKE_CITY_IDS } from '../../shared/area';
 import {
@@ -15,7 +16,7 @@ import {
   type AreaTimetable,
   type Timetable,
 } from '../../shared/transit';
-import type { BikePlace, GroupDepartures, LiveData, Place, PlanResult, Stop } from './api';
+import { LIVE_URL, type BikePlace, type GroupDepartures, type LiveData, type Place, type PlanResult, type Stop, type TripDetail, type Vehicle } from './api';
 
 let ttPromise: Promise<Timetable> | null = null;
 
@@ -41,7 +42,14 @@ export async function staticStops(): Promise<Stop[]> {
 export async function staticDepartures(stopId: string): Promise<GroupDepartures> {
   const tt = await timetable();
   const stop = (await staticStops()).find((s) => s.id === stopId);
-  const departures = timetableDepartures(tt, stopId.replace(/^station:/, '')).map((d) => ({ ...d, tripKey: d.tripKey ?? '' }));
+  const byKey = await liveByKey();
+  const departures = timetableDepartures(tt, stopId.replace(/^station:/, '')).map((d) => {
+    const v = d.tripKey ? byKey.get(d.tripKey) : undefined;
+    // spoj, který právě jede: zvýraznit (dá se na něj kliknout) a doplnit zpoždění
+    return v
+      ? { ...d, tripKey: v.tripKey, live: true, delaySec: v.delaySec, expectedAt: d.expectedAt + (v.delaySec ?? 0) * 1000 }
+      : { ...d, tripKey: d.tripKey ?? '' };
+  });
   return { stops: stop ? [stop] : [], departures, errors: [] };
 }
 
@@ -51,7 +59,52 @@ export async function staticSearchPlaces(q: string): Promise<Place[]> {
 
 export async function staticPlan(from: Place, to: Place, at?: number): Promise<PlanResult> {
   const tt = await timetable();
-  return { from, to, journeys: planJourneys(tt, from, to, at ?? Date.now()) };
+  const journeys = planJourneys(tt, from, to, at ?? Date.now());
+  // Živé zpoždění u spojů IREDO (spárují se číslem spoje). MHD potřebuje odjezdovou tabuli – jen se serverem.
+  const byKey = await liveByKey();
+  for (const j of journeys)
+    for (const l of j.legs) {
+      const v = l.type === 'ride' && l.tripKey ? byKey.get(l.tripKey) : undefined;
+      if (l.type === 'ride' && v) l.live = { delaySec: v.delaySec, onMap: true, lat: v.lat, lon: v.lon };
+    }
+  return { from, to, journeys };
+}
+
+// ---------------------------------------------------------------- živé busy přes prostředníka
+
+const LIVE_TTL_MS = 8000;
+let liveCache: { at: number; data: Promise<{ vehicles: Vehicle[]; status: LiveData['status'] }> } | null = null;
+
+/** Živé busy z prostředníka (sdílené pro mapu, odjezdy i spojení; max. 1 dotaz za 8 s). */
+function liveVehicles(): Promise<{ vehicles: Vehicle[]; status: LiveData['status'] }> {
+  if (!LIVE_URL) return Promise.resolve({ vehicles: [], status: {} });
+  if (liveCache && Date.now() - liveCache.at < LIVE_TTL_MS) return liveCache.data;
+  const data = fetch(`${LIVE_URL}/api/live`)
+    .then((r) => {
+      if (!r.ok) throw new Error(`Živá data: ${r.status}`);
+      return r.json() as Promise<LiveData>;
+    })
+    .then((d) => ({ vehicles: d.vehicles, status: d.status }))
+    .catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      const err = { ok: false, lastSuccess: null, lastError: msg, itemCount: 0 };
+      return { vehicles: [] as Vehicle[], status: { iredo: err, dpmhk: err } };
+    });
+  liveCache = { at: Date.now(), data };
+  return data;
+}
+
+async function liveByKey(): Promise<Map<string, Vehicle>> {
+  return new Map((await liveVehicles()).vehicles.map((v) => [v.tripKey, v]));
+}
+
+/** Trasa a zastávky spoje (klik na bus). */
+export async function staticTrip(tripKey: string): Promise<TripDetail> {
+  if (!LIVE_URL) throw new Error('Trasa spoje je jen s živými daty');
+  const r = await fetch(`${LIVE_URL}/api/trip/${encodeURIComponent(tripKey)}`);
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(body?.error ?? `Prostředník odpověděl ${r.status}`);
+  return body as TripDetail;
 }
 
 // ---------------------------------------------------------------- Nextbike
@@ -94,19 +147,15 @@ async function nextbike(): Promise<BikePlace[]> {
   return out;
 }
 
-/** „Živá“ data bez serveru: jen Nextbike (busy nejsou). */
+/** Živá data bez serveru: Nextbike přímo + busy přes prostředníka (když je nastavený). */
 export async function staticLive(): Promise<LiveData> {
   const now = Date.now();
-  try {
-    const bikes = await nextbike();
-    return {
-      now,
-      vehicles: [],
-      bikes,
-      status: { nextbike: { ok: true, lastSuccess: now, lastError: null, itemCount: bikes.length } },
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { now, vehicles: [], bikes: [], status: { nextbike: { ok: false, lastSuccess: null, lastError: msg, itemCount: 0 } } };
-  }
+  const [bikesR, liveR] = await Promise.allSettled([nextbike(), liveVehicles()]);
+  const lv = liveR.status === 'fulfilled' ? liveR.value : { vehicles: [], status: {} };
+  const bikes = bikesR.status === 'fulfilled' ? bikesR.value : [];
+  const nb =
+    bikesR.status === 'fulfilled'
+      ? { ok: true, lastSuccess: now, lastError: null, itemCount: bikes.length }
+      : { ok: false, lastSuccess: null, lastError: String((bikesR.reason as Error)?.message ?? bikesR.reason), itemCount: 0 };
+  return { now, vehicles: lv.vehicles, bikes, status: { ...lv.status, nextbike: nb } };
 }

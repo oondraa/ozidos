@@ -78,6 +78,10 @@ const API = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
  * se počítají v prohlížeči, živé polohy busů nejsou. Viz static.ts.
  */
 export const STATIC = import.meta.env.VITE_STATIC === '1';
+/** Adresa prostředníka pro živé busy na GitHub Pages (Vercel, viz proxy/). */
+export const LIVE_URL = (import.meta.env.VITE_LIVE_URL ?? '').replace(/\/$/, '');
+/** Jsou k dispozici živé busy? (lokální server, nebo prostředník) */
+export const HAS_LIVE = !STATIC || !!LIVE_URL;
 const offline = () => import('./static');
 
 async function get<T>(path: string): Promise<T> {
@@ -91,7 +95,8 @@ async function get<T>(path: string): Promise<T> {
 
 export const getLive = () => (STATIC ? offline().then((m) => m.staticLive()) : get<LiveData>('/api/live'));
 export const getStops = () => (STATIC ? offline().then((m) => m.staticStops()) : get<Stop[]>('/api/stops'));
-export const getTrip = (tripKey: string) => get<TripDetail>(`/api/trip/${encodeURIComponent(tripKey)}`);
+export const getTrip = (tripKey: string) =>
+  STATIC ? offline().then((m) => m.staticTrip(tripKey)) : get<TripDetail>(`/api/trip/${encodeURIComponent(tripKey)}`);
 
 export interface Departure {
   tripKey: string;

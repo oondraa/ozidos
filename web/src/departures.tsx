@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getDepartures, STATIC, type Departure, type GroupDepartures, type Stop } from './api';
+import { getDepartures, HAS_LIVE, STATIC, type Departure, type GroupDepartures, type Stop } from './api';
 import { delayLevel, formatDelay } from './format';
 import { IconClose, IconStop } from './icons';
 
@@ -100,7 +100,11 @@ export function DeparturesCard({ stop, now, onClose, onSelectTrip }: Props) {
       )}
       {data && data.errors.length > 0 && <small className="muted">Část zdrojů neodpověděla: {data.errors.join('; ')}</small>}
       {hasIredo && <small className="muted">Busy a vlaky IREDO jen zhruba hodinu dopředu.</small>}
-      {STATIC && <small className="muted">Podle jízdního řádu, bez živých zpoždění.</small>}
+      {STATIC && (
+        <small className="muted">
+          {HAS_LIVE ? 'Podle jízdního řádu; spoje, které právě jedou, jsou zvýrazněné.' : 'Podle jízdního řádu, bez živých zpoždění.'}
+        </small>
+      )}
     </section>
   );
 }
